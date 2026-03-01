@@ -30,6 +30,14 @@
     "url": "https://github.com/carderne/pi-nvim/issues"
   },
   "homepage": "https://github.com/carderne/pi-nvim",
+  "scripts": {
+    "fmt": "oxfmt extension.ts",
+    "lint": "oxlint index.ts",
+    "check": "tsc --noEmit",
+    "ci:fmt": "oxfmt --check extension.ts",
+    "ci:lint": "npm run lint",
+    "ci:check": "npm run check"
+  },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
   },
@@ -41,6 +49,8 @@
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "*",
     "@types/node": "^24",
+    "oxfmt": "^0.33.0",
+    "oxlint": "^1.48.0",
     "typescript": "^5"
   }
 }

@@ -46,7 +46,9 @@ export default function (pi: ExtensionAPI) {
   pi.on("session_start", async (_event, ctx) => {
     const cwd = ctx.cwd;
     // Ensure sockets directory exists
-    try { fs.mkdirSync(SOCKETS_DIR, { recursive: true }); } catch {}
+    try {
+      fs.mkdirSync(SOCKETS_DIR, { recursive: true });
+    } catch {}
 
     socketPath = getSocketPath(cwd);
 
@@ -76,7 +78,7 @@ export default function (pi: ExtensionAPI) {
         fs.unlinkSync(LATEST_LINK);
       } catch {}
       try {
-        fs.symlinkSync(socketPath, LATEST_LINK);
+        fs.symlinkSync(socketPath!, LATEST_LINK);
       } catch {}
 
       // Register in sockets directory for discovery
@@ -127,7 +129,9 @@ export default function (pi: ExtensionAPI) {
       server = null;
     }
     if (socketPath) {
-      try { fs.unlinkSync(socketPath); } catch {}
+      try {
+        fs.unlinkSync(socketPath);
+      } catch {}
       try {
         // Clean up latest symlink if it points to us
         const target = fs.readlinkSync(LATEST_LINK);
