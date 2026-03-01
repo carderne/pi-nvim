@@ -1,0 +1,46 @@
+{
+  "name": "pi-nvim",
+  "version": "0.1.0",
+  "description": "Bridge between pi coding agent and Neovim",
+  "keywords": [
+    "pi-package",
+    "pi-extension"
+  ],
+  "files": [
+    "extension.ts",
+    "package.json",
+    "README.md"
+  ],
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "./extension.ts"
+    ]
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/carderne/pi-nvim.git"
+  },
+  "author": "Chris Arderne <chris@rdrn.me>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/carderne/pi-nvim/issues"
+  },
+  "homepage": "https://github.com/carderne/pi-nvim",
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "*",
+    "@types/node": "^24",
+    "typescript": "^5"
+  }
+}
