@@ -8,6 +8,8 @@ import * as crypto from "node:crypto";
  * pi-nvim: Exposes a unix socket so external tools (like a neovim plugin)
  * can send prompts/context into a running interactive pi session.
  *
+ * Repo: https://github.com/carderne/pi-nvim
+ *
  * Protocol: newline-delimited JSON over a unix socket.
  *
  * Commands:
@@ -85,10 +87,15 @@ export default function (pi: ExtensionAPI) {
       try {
         fs.mkdirSync(SOCKETS_DIR, { recursive: true });
         // Write a manifest file alongside the socket for discovery
-        fs.writeFileSync(socketPath + ".info", JSON.stringify({ cwd, pid: process.pid, startedAt: new Date().toISOString() }));
+        fs.writeFileSync(
+          socketPath + ".info",
+          JSON.stringify({
+            cwd,
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+          }),
+        );
       } catch {}
-
-      ctx.ui.notify(`pi-nvim listening on ${socketPath}`, "info");
     });
 
     server.on("error", (err) => {
@@ -106,6 +113,9 @@ export default function (pi: ExtensionAPI) {
       }
 
       if (msg.type === "prompt" && typeof msg.message === "string") {
+        // Exit kitty's scrollback viewer by switching to private screen mode
+        // and back. This snaps to the bottom without clearing scrollback history.
+        process.stdout.write("\x1b[?1049h\x1b[?1049l");
         pi.sendUserMessage(msg.message);
         respond(conn, { ok: true });
         return;
@@ -128,19 +138,17 @@ export default function (pi: ExtensionAPI) {
       server.close();
       server = null;
     }
-    if (socketPath) {
-      try {
-        fs.unlinkSync(socketPath);
-      } catch {}
-      try {
-        // Clean up latest symlink if it points to us
-        const target = fs.readlinkSync(LATEST_LINK);
-        if (target === socketPath) fs.unlinkSync(LATEST_LINK);
-      } catch {}
-      try {
-        fs.unlinkSync(socketPath + ".info");
-      } catch {}
-    }
+    try {
+      fs.unlinkSync(socketPath!);
+    } catch {}
+    try {
+      // Clean up latest symlink if it points to us
+      const target = fs.readlinkSync(LATEST_LINK);
+      if (target === socketPath) fs.unlinkSync(LATEST_LINK);
+    } catch {}
+    try {
+      fs.unlinkSync(socketPath + ".info");
+    } catch {}
   }
 
   pi.on("session_shutdown", async () => {
