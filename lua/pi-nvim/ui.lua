@@ -115,6 +115,15 @@ function M.open(opts)
   })
   vim.wo[input_win].winhl = "NormalFloat:Normal,FloatBorder:PiNvimBorder,FloatTitle:PiNvimTitle"
 
+  -- Highlight the visual selection in the source buffer while the dialog is open
+  local sel_ns = nil
+  if selection and vim.api.nvim_buf_is_valid(source_buf) then
+    sel_ns = vim.api.nvim_create_namespace("pi_nvim_selection")
+    for lnum = selection.start_line, selection.end_line do
+      vim.api.nvim_buf_add_highlight(source_buf, sel_ns, "Visual", lnum - 1, 0, -1)
+    end
+  end
+
   -- Start in insert mode
   vim.cmd("noautocmd startinsert!")
 
@@ -124,6 +133,10 @@ function M.open(opts)
     if closed then return end
     closed = true
     vim.cmd("noautocmd stopinsert")
+    -- Remove selection highlight from source buffer
+    if sel_ns and vim.api.nvim_buf_is_valid(source_buf) then
+      vim.api.nvim_buf_clear_namespace(source_buf, sel_ns, 0, -1)
+    end
     pcall(vim.api.nvim_win_close, input_win, true)
     pcall(vim.api.nvim_win_close, info_win, true)
     pcall(vim.api.nvim_buf_delete, input_buf, { force = true })
