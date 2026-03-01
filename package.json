@@ -1,6 +1,6 @@
 {
   "name": "pi-nvim",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Bridge between pi coding agent and Neovim",
   "keywords": [
     "pi-package",
