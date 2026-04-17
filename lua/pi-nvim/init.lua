@@ -2,8 +2,10 @@ local M = {}
 
 --- @class pi_nvim.Config
 --- @field socket_path string|nil  Override socket path (default: auto-discover)
+--- @field set_default_keymaps boolean|nil  Whether to create the default <leader>p mappings (default: true)
 M.config = {
   socket_path = nil,
+  set_default_keymaps = true,
 }
 
 --- @param opts pi_nvim.Config|nil
@@ -48,9 +50,11 @@ function M.setup(opts)
     ui.open({ selection = selection })
   end, { range = true, desc = "Open pi send dialog" })
 
-  -- Default keymap: <leader>p in normal and visual mode
-  vim.keymap.set("n", "<leader>p", ":Pi<CR>", { silent = true, desc = "Send to pi" })
-  vim.keymap.set("v", "<leader>p", ":Pi<CR>", { silent = true, desc = "Send selection to pi" })
+  if M.config.set_default_keymaps then
+    -- Default keymap: <leader>p in normal and visual mode
+    vim.keymap.set("n", "<leader>p", ":Pi<CR>", { silent = true, desc = "Send to pi" })
+    vim.keymap.set("v", "<leader>p", ":Pi<CR>", { silent = true, desc = "Send selection to pi" })
+  end
 
   vim.api.nvim_create_user_command("PiPing", function()
     M.ping()

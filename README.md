@@ -45,6 +45,15 @@ Then in your config:
 require("pi-nvim").setup()
 ```
 
+Options (defaults):
+
+```lua
+require("pi-nvim").setup({
+  socket_path = nil, -- auto-discover
+  set_default_keymaps = true,
+})
+```
+
 ## Usage
 
 Start pi in one terminal. Start Neovim in another. The pi extension automatically opens a socket on session start.
@@ -64,6 +73,14 @@ Start pi in one terminal. Start Neovim in another. The pi extension automaticall
 ### Default keybindings
 
 `<leader>p` is mapped to `:Pi` in both normal and visual mode by default.
+
+To disable the default mappings:
+
+```lua
+require("pi-nvim").setup({
+  set_default_keymaps = false,
+})
+```
 
 ### The `:Pi` dialog
 
