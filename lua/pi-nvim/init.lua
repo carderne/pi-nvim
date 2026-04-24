@@ -188,6 +188,41 @@ end
 --- @param message string|nil  If nil, prompts the user for input
 function M.prompt(message)
   if message then
+    -- Check for a running pi terminal buffer
+    local term_buf = nil
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].buftype == "terminal" then
+        local name = vim.api.nvim_buf_get_name(buf)
+        -- Match ":pi" or ":pi " at the end/middle of the term name
+        if name:lower():match(":pi$") or name:lower():match(":pi%s") then
+          term_buf = buf
+          break
+        end
+      end
+    end
+
+    if term_buf then
+      local id = vim.b[term_buf].terminal_job_id
+      if id then
+        -- Focus or open the terminal window
+        local win = vim.fn.bufwinid(term_buf)
+        if win ~= -1 then
+          vim.api.nvim_set_current_win(win)
+        else
+          vim.cmd("botright split")
+          vim.api.nvim_win_set_buf(0, term_buf)
+        end
+
+        -- Send via bracketed paste to handle newlines correctly, and append \r to submit
+        local payload = "\x1b[200~" .. message .. "\x1b[201~\r"
+        vim.api.nvim_chan_send(id, payload)
+        vim.cmd("startinsert")
+        
+        vim.notify("Sent to pi terminal buffer", vim.log.levels.INFO)
+        return
+      end
+    end
+
     M.send_raw({ type = "prompt", message = message }, function(err, resp)
       if err then return end
       if resp and resp.ok then
