@@ -1,5 +1,15 @@
 local M = {}
 
+--- Directory holding the .info manifests / marker files. Must match the
+--- pi extension's SOCKETS_DIR: /tmp on unix, %TEMP% on Windows.
+local function sockets_dir()
+  if vim.fn.has("win32") == 1 then
+    local tmp = vim.env.TEMP or vim.env.TMP
+    return tmp and (tmp:gsub("\\", "/") .. "/pi-nvim-sockets") or nil
+  end
+  return "/tmp/pi-nvim-sockets"
+end
+
 --- @class pi_nvim.Config
 --- @field socket_path string|nil  Override socket path (default: auto-discover)
 --- @field set_default_keymaps boolean|nil  Whether to create the default <leader>p mappings (default: true)
@@ -73,51 +83,49 @@ function M.get_socket_path()
     return M.config.socket_path
   end
 
-  local sockets_dir = "/tmp/pi-nvim-sockets"
+  local sd = sockets_dir()
+  if not sd then return nil end
   local cwd = vim.uv.cwd()
 
   -- Scan the sockets directory for .info files
-  local ok, files = pcall(vim.fn.glob, sockets_dir .. "/*.info", false, true)
+  local ok, files = pcall(vim.fn.glob, sd .. "/*.info", false, true)
   if ok and files then
-    -- First pass: exact cwd match, prefer newest socket
-    local best_sock = nil
-    local best_mtime = 0
+    -- Collect live sessions. The .sock file is a real unix socket on unix and
+    -- a liveness marker on Windows; the connect address always comes from the
+    -- manifest's "socket" field (falls back to the file-derived path).
+    local best_sock, best_mtime = nil, 0
+    local any_sock, any_mtime = nil, 0
     for _, info_path in ipairs(files) do
       local content_ok, content = pcall(vim.fn.readfile, info_path)
       if content_ok and content and content[1] then
         local parsed_ok, info = pcall(vim.json.decode, content[1])
         if parsed_ok and info then
-          local sock = info_path:sub(1, -6) -- strip ".info"
-          local stat = vim.uv.fs_stat(sock)
-          if info.cwd == cwd and stat then
-            if stat.mtime.sec > best_mtime then
+          local sock_file = info_path:sub(1, -6) -- strip ".info"
+          local stat = vim.uv.fs_stat(sock_file)
+          local addr = info.socket or sock_file
+          if stat then
+            if stat.mtime.sec > any_mtime then
+              any_mtime = stat.mtime.sec
+              any_sock = addr
+            end
+            if info.cwd == cwd and stat.mtime.sec > best_mtime then
               best_mtime = stat.mtime.sec
-              best_sock = sock
+              best_sock = addr
             end
           end
         end
       end
     end
     if best_sock then return best_sock end
-
-    -- Second pass: any live session (newest)
-    for _, info_path in ipairs(files) do
-      local sock = info_path:sub(1, -6)
-      local stat = vim.uv.fs_stat(sock)
-      if stat then
-        if stat.mtime.sec > best_mtime then
-          best_mtime = stat.mtime.sec
-          best_sock = sock
-        end
-      end
-    end
-    if best_sock then return best_sock end
+    if any_sock then return any_sock end
   end
 
-  -- Fall back to latest symlink
-  local latest = "/tmp/pi-nvim-latest.sock"
-  if vim.uv.fs_stat(latest) then
-    return latest
+  -- Fall back to latest symlink (unix only; Windows has none)
+  if vim.fn.has("win32") == 0 then
+    local latest = "/tmp/pi-nvim-latest.sock"
+    if vim.uv.fs_stat(latest) then
+      return latest
+    end
   end
 
   return nil
@@ -332,8 +340,12 @@ end
 
 --- List all running pi sessions.
 function M.list_sessions()
-  local sockets_dir = "/tmp/pi-nvim-sockets"
-  local ok, files = pcall(vim.fn.glob, sockets_dir .. "/*.info", false, true)
+  local sd = sockets_dir()
+  if not sd then
+    vim.notify("No pi sessions found", vim.log.levels.INFO)
+    return
+  end
+  local ok, files = pcall(vim.fn.glob, sd .. "/*.info", false, true)
   if not ok or not files or #files == 0 then
     vim.notify("No pi sessions found", vim.log.levels.INFO)
     return
@@ -345,8 +357,8 @@ function M.list_sessions()
     if content_ok and content and content[1] then
       local parsed_ok, info = pcall(vim.json.decode, content[1])
       if parsed_ok and info then
-        local sock = info_path:sub(1, -6)
-        local alive = vim.uv.fs_stat(sock) ~= nil
+        local sock_file = info_path:sub(1, -6)
+        local alive = vim.uv.fs_stat(sock_file) ~= nil
         if alive then
           -- Format start time as relative or short time
           local started = ""
@@ -365,7 +377,7 @@ function M.list_sessions()
             cwd = info.cwd or "?",
             pid = info.pid or "?",
             started = started,
-            socket = sock,
+            socket = info.socket or sock_file,
           })
         end
       end

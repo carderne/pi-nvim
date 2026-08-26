@@ -13,6 +13,8 @@ The repo contains two components:
 
 Discovery is automatic: the extension writes socket info to `/tmp/pi-nvim-sockets/`, and the Neovim plugin scans that directory, preferring sessions matching your cwd.
 
+On Windows, unix sockets don't exist, so the extension binds a named pipe (`\\.\pipe\pi-nvim-*`) and writes the manifests into `%TEMP%/pi-nvim-sockets/` instead — the plugin reads the actual connect address from the manifest's `socket` field. Unix behavior is unchanged.
+
 ## Install
 
 ### Pi side

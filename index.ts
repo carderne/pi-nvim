@@ -1,16 +1,17 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import * as net from "node:net";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
 
 /**
- * pi-nvim: Exposes a unix socket so external tools (like a neovim plugin)
+ * pi-nvim: Exposes a socket so external tools (like a neovim plugin)
  * can send prompts/context into a running interactive pi session.
  *
  * Repo: https://github.com/carderne/pi-nvim
  *
- * Protocol: newline-delimited JSON over a unix socket.
+ * Protocol: newline-delimited JSON over a socket.
  *
  * Commands:
  *   { "type": "prompt", "message": "..." }
@@ -22,28 +23,42 @@ import * as crypto from "node:crypto";
  *   { "ok": true, "type": "pong" }
  *   { "ok": false, "error": "..." }
  *
- * Socket path: /tmp/pi-nvim-<hash-of-cwd>.sock
- * A symlink at /tmp/pi-nvim-latest.sock always points to the most recently
- * started session, so neovim can just connect there if there's only one.
- *
- * The socket path for a given cwd is also written to /tmp/pi-nvim-sockets/<hash>
- * as a plain text file containing the cwd, so neovim can list all running sessions.
+ * Unix: unix socket at /tmp/pi-nvim-sockets/<hash>-<pid>.sock, a symlink at
+ * /tmp/pi-nvim-latest.sock, and a .info manifest next to each socket.
+ * Windows: unix sockets don't exist, so bind a named pipe
+ * \\.\pipe\pi-nvim-<hash>-<pid> instead. The manifest (.info) lives in
+ * %TEMP%/pi-nvim-sockets together with a marker <hash>-<pid>.sock file so the
+ * nvim side can stat for liveness; the JSON carries the connect address in
+ * "socket". The nvim plugin computes the same dir from TEMP (see sockets_dir()).
  */
 
 function cwdHash(cwd: string): string {
   return crypto.createHash("md5").update(cwd).digest("hex").slice(0, 12);
 }
 
-function getSocketPath(cwd: string): string {
-  return path.join(SOCKETS_DIR, `${cwdHash(cwd)}-${process.pid}.sock`);
+const IS_WIN = process.platform === "win32";
+const SOCKETS_DIR = IS_WIN ? path.join(os.tmpdir(), "pi-nvim-sockets") : "/tmp/pi-nvim-sockets";
+// Windows has no symlinks here; discovery relies solely on the .info manifests.
+const LATEST_LINK = IS_WIN ? null : "/tmp/pi-nvim-latest.sock";
+
+function socketBase(cwd: string): string {
+  return `${cwdHash(cwd)}-${process.pid}`;
 }
 
-const SOCKETS_DIR = "/tmp/pi-nvim-sockets";
-const LATEST_LINK = "/tmp/pi-nvim-latest.sock";
+/** Path of the socket file (unix) or the liveness marker file (Windows). */
+function socketFilePath(cwd: string): string {
+  return path.join(SOCKETS_DIR, `${socketBase(cwd)}.sock`);
+}
+
+/** Actual listen address: a unix socket path or a Windows named pipe. */
+function getSocketPath(cwd: string): string {
+  return IS_WIN ? `\\\\.\\pipe\\pi-nvim-${socketBase(cwd)}` : socketFilePath(cwd);
+}
 
 export default function (pi: ExtensionAPI) {
   let server: net.Server | null = null;
   let socketPath: string | null = null;
+  let markerFile: string | null = null;
 
   pi.on("session_start", async (_event, ctx) => {
     const cwd = ctx.cwd;
@@ -53,10 +68,14 @@ export default function (pi: ExtensionAPI) {
     } catch {}
 
     socketPath = getSocketPath(cwd);
+    markerFile = socketFilePath(cwd);
 
-    // Clean up stale socket
+    // Clean up stale socket/marker
     try {
       fs.unlinkSync(socketPath);
+    } catch {}
+    try {
+      fs.unlinkSync(markerFile);
     } catch {}
 
     server = net.createServer((conn) => {
@@ -75,21 +94,26 @@ export default function (pi: ExtensionAPI) {
     });
 
     server.listen(socketPath, () => {
-      // Update latest symlink
-      try {
-        fs.unlinkSync(LATEST_LINK);
-      } catch {}
-      try {
-        fs.symlinkSync(socketPath!, LATEST_LINK);
-      } catch {}
+      // Update latest symlink (unix only)
+      if (LATEST_LINK) {
+        try {
+          fs.unlinkSync(LATEST_LINK);
+        } catch {}
+        try {
+          fs.symlinkSync(socketPath!, LATEST_LINK);
+        } catch {}
+      }
 
       // Register in sockets directory for discovery
       try {
         fs.mkdirSync(SOCKETS_DIR, { recursive: true });
-        // Write a manifest file alongside the socket for discovery
+        // Windows: named pipes aren't visible in the filesystem, so leave a
+        // marker file the nvim side can stat for liveness.
+        if (IS_WIN) fs.writeFileSync(markerFile!, "");
         fs.writeFileSync(
-          socketPath + ".info",
+          markerFile! + ".info",
           JSON.stringify({
+            socket: socketPath,
             cwd,
             pid: process.pid,
             startedAt: new Date().toISOString(),
@@ -138,16 +162,22 @@ export default function (pi: ExtensionAPI) {
       server.close();
       server = null;
     }
+    if (!socketPath) return;
     try {
-      fs.unlinkSync(socketPath!);
+      fs.unlinkSync(socketPath);
     } catch {}
     try {
-      // Clean up latest symlink if it points to us
-      const target = fs.readlinkSync(LATEST_LINK);
-      if (target === socketPath) fs.unlinkSync(LATEST_LINK);
+      if (markerFile) fs.unlinkSync(markerFile);
     } catch {}
     try {
-      fs.unlinkSync(socketPath + ".info");
+      // Clean up latest symlink if it points to us (unix only)
+      if (LATEST_LINK) {
+        const target = fs.readlinkSync(LATEST_LINK);
+        if (target === socketPath) fs.unlinkSync(LATEST_LINK);
+      }
+    } catch {}
+    try {
+      if (markerFile) fs.unlinkSync(markerFile + ".info");
     } catch {}
   }
 
