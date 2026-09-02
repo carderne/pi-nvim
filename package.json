@@ -7,14 +7,14 @@
     "pi-extension"
   ],
   "files": [
-    "extension.ts",
+    "index.ts",
     "package.json",
     "README.md"
   ],
   "type": "module",
   "pi": {
     "extensions": [
-      "./extension.ts"
+      "./index.ts"
     ]
   },
   "publishConfig": {
@@ -31,10 +31,10 @@
   },
   "homepage": "https://github.com/carderne/pi-nvim",
   "scripts": {
-    "fmt": "oxfmt extension.ts",
+    "fmt": "oxfmt index.ts",
     "lint": "oxlint index.ts",
     "check": "tsc --noEmit",
-    "ci:fmt": "oxfmt --check extension.ts",
+    "ci:fmt": "oxfmt --check index.ts",
     "ci:lint": "npm run lint",
     "ci:check": "npm run check"
   },

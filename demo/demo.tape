@@ -22,7 +22,7 @@ Set PlaybackSpeed 1
 Hide
 
 Set TypingSpeed 1ms
-Type "tmux new-session -d -s demo -x 200 -y 50 'nvim extension.ts' && tmux split-window -h -p 40 -t demo 'pi' && tmux select-pane -t demo:.0 && tmux attach -t demo"
+Type "tmux new-session -d -s demo -x 200 -y 50 'nvim index.ts' && tmux split-window -h -p 40 -t demo 'pi' && tmux select-pane -t demo:.0 && tmux attach -t demo"
 Enter
 Set TypingSpeed 50ms
 Sleep 3s
@@ -123,7 +123,7 @@ Enter
 Sleep 500ms
 
 # Restore file
-Type "git restore extension.ts"
+Type "git restore index.ts"
 Enter
 
 Show
