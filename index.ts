@@ -1,4 +1,4 @@
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import * as net from "node:net";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -87,7 +87,7 @@ export default function (pi: ExtensionAPI) {
           const line = buffer.slice(0, newlineIdx).trim();
           buffer = buffer.slice(newlineIdx + 1);
           if (!line) continue;
-          handleMessage(line, conn, cwd);
+          handleMessage(line, conn, ctx);
         }
       });
       conn.on("error", () => {});
@@ -127,7 +127,7 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  function handleMessage(raw: string, conn: net.Socket, _cwd: string) {
+  function handleMessage(raw: string, conn: net.Socket, ctx: ExtensionContext) {
     try {
       const msg = JSON.parse(raw);
 
@@ -140,7 +140,10 @@ export default function (pi: ExtensionAPI) {
         // Exit kitty's scrollback viewer by switching to private screen mode
         // and back. This snaps to the bottom without clearing scrollback history.
         process.stdout.write("\x1b[?1049h\x1b[?1049l");
-        pi.sendUserMessage(msg.message, { deliverAs: "followUp" });
+        // Only queue as a follow-up while a run is streaming. When idle, omit
+        // deliverAs so the prompt starts a turn: omp treats an explicit
+        // "followUp" as queue-only even when idle, so the message never runs.
+        pi.sendUserMessage(msg.message, ctx.isIdle() ? undefined : { deliverAs: "followUp" });
         respond(conn, { ok: true });
         return;
       }
