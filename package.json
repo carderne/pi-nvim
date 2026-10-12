@@ -39,7 +39,7 @@
     "ci:check": "npm run check"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0"
+    "@earendil-works/pi-coding-agent": "^0.87.0 || ^1.0.0"
   },
   "peerDependenciesMeta": {
     "@earendil-works/pi-coding-agent": {
