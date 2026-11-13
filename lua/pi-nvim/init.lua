@@ -142,10 +142,12 @@ end
 --- @field socket_path string|nil  Override socket path (default: auto-discover)
 --- @field set_default_keymaps boolean|nil  Whether to create the default <leader>p mappings (default: true)
 --- @field autoreload boolean|nil  Force `autoread` and poll changed files while a pi session is reachable (default: false)
+--- @field notify boolean|nil  Notify when pi settles a task or the session stops (default: true)
 M.config = {
   socket_path = nil,
   set_default_keymaps = true,
   autoreload = false,
+  notify = true,
 }
 
 --- Socket picked with :PiSessions. Kept out of M.config so it never looks like a
@@ -161,7 +163,133 @@ function M.unpin()
   M._pinned_socket = nil
 end
 
---- Stop the autoreload poller (safe to call when it was never started).
+--- Delay before retrying the notification connection (ms).
+local WATCH_RETRY_MS = 1000
+
+local watch_connect
+
+--- @type uv_pipe_t|nil
+M._watch_pipe = nil
+--- @type uv_timer_t|nil
+M._watch_timer = nil
+--- @type string
+M._watch_buf = ""
+
+--- Dispatch one event line pushed by pi. Runs on the main loop.
+--- @param line string
+local function handle_event(line)
+  local ok, msg = pcall(vim.json.decode, line)
+  if not ok or type(msg) ~= "table" then return end
+  if msg.type == "agent_settled" then
+    vim.notify("pi: task finished", vim.log.levels.INFO)
+  elseif msg.type == "session_shutdown" then
+    vim.notify("pi: session stopped (" .. tostring(msg.reason or "unknown") .. ")", vim.log.levels.WARN)
+  end
+end
+
+--- Stop the notification watcher (safe to call when it was never started).
+local function watch_stop()
+  if M._watch_timer then
+    local timer = M._watch_timer
+    M._watch_timer = nil
+    pcall(function()
+      timer:stop()
+      timer:close()
+    end)
+  end
+  if M._watch_pipe then
+    local pipe = M._watch_pipe
+    M._watch_pipe = nil
+    M._watch_buf = ""
+    pcall(function()
+      pipe:read_stop()
+      pipe:close()
+    end)
+  end
+end
+
+--- Retry the connection once, a second from now.
+local function watch_retry()
+  if M._watch_timer or not M.config.notify then return end
+  local timer = vim.uv.new_timer()
+  if not timer then return end
+  M._watch_timer = timer
+  timer:start(WATCH_RETRY_MS, 0, vim.schedule_wrap(function()
+    if M._watch_timer == timer then
+      M._watch_timer = nil
+      pcall(function()
+        timer:stop()
+        timer:close()
+      end)
+    end
+    watch_connect()
+  end))
+end
+
+--- Keep one connection open so pi can push events; retry while pi is down.
+watch_connect = function()
+  if not M.config.notify or M._watch_pipe then return end
+
+  local sock_path = M.get_socket_path()
+  if not sock_path then
+    watch_retry()
+    return
+  end
+
+  local pipe = vim.uv.new_pipe(false)
+  if not pipe then
+    watch_retry()
+    return
+  end
+  M._watch_pipe = pipe
+  M._watch_buf = ""
+
+  local function teardown()
+    if M._watch_pipe ~= pipe then return end
+    M._watch_pipe = nil
+    M._watch_buf = ""
+    pcall(function()
+      pipe:read_stop()
+      pipe:close()
+    end)
+  end
+
+  pipe:connect(sock_path, function(err)
+    if err then
+      teardown()
+      watch_retry()
+      return
+    end
+
+    local wrote = pcall(pipe.write, pipe, '{"type":"subscribe"}\n')
+    if not wrote then
+      teardown()
+      watch_retry()
+      return
+    end
+    pipe:read_start(function(read_err, data)
+      if read_err or not data then
+        teardown()
+        watch_retry()
+        return
+      end
+
+      M._watch_buf = M._watch_buf .. data
+      while true do
+        local nl = M._watch_buf:find("\n", 1, true)
+        if not nl then break end
+        local line = M._watch_buf:sub(1, nl - 1)
+        M._watch_buf = M._watch_buf:sub(nl + 1)
+        if line ~= "" then
+          vim.schedule(function() handle_event(line) end)
+        end
+      end
+    end)
+  end)
+end
+
+--- Stop the background pollers (autoreload and notifications).
+--- Safe to call when neither was started.
 function M.stop()
   if M._reload_timer then
     local timer = M._reload_timer
@@ -171,6 +299,7 @@ function M.stop()
       timer:close()
     end)
   end
+  watch_stop()
 end
 
 --- @param opts pi_nvim.Config|nil
@@ -195,6 +324,18 @@ function M.setup(opts)
         pcall(vim.cmd, "silent! checktime")
       end
     end))
+  end
+
+  -- Push notifications: keep a connection open so pi can report task finishes
+  -- and session shutdowns without Neovim asking.
+  if M.config.notify then
+    watch_connect()
+    local group = vim.api.nvim_create_augroup("pi_nvim_notify", { clear = true })
+    vim.api.nvim_create_autocmd("VimLeavePre", {
+      group = group,
+      callback = function() watch_stop() end,
+      desc = "Release the pi-nvim notification connection",
+    })
   end
 
   -- Commands

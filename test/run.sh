@@ -5,7 +5,8 @@
 #
 # Runs each spec in its own headless Neovim with an isolated socket directory
 # (PI_NVIM_SOCKETS_DIR), so no real pi session is touched and nothing is left
-# behind in /tmp/pi-nvim-sockets.
+# behind in /tmp/pi-nvim-sockets. The extension's own push protocol is checked
+# with node, outside Neovim.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -26,11 +27,16 @@ run_spec() {
 }
 
 status=0
-for spec in classify_spec sessions_spec prompt_spec commands_spec ui_spec; do
+for spec in classify_spec sessions_spec prompt_spec commands_spec ui_spec notify_spec; do
 	if ! run_spec "$spec"; then
 		status=1
 	fi
 done
+
+# The server side of the bridge is the pi extension, not Lua.
+if ! node "$root/test/server_spec.mjs"; then
+	status=1
+fi
 
 if [ "$status" -eq 0 ]; then
 	echo "all specs passed"

@@ -18,6 +18,7 @@ import * as crypto from "node:crypto";
  *   { "type": "prompt", "message": "...", "images": [{ "type": "image", "data": "<base64>", "mimeType": "image/png" }] }
  *   { "type": "prompt", "message": "/skill:foo", "expandPromptTemplates": true }
  *   { "type": "ping" }
+ *   { "type": "subscribe" }   (keep the connection open for pushed events)
  *
  * expandPromptTemplates makes pi dispatch extension commands and expand
  * /skill:* and /template instead of sending the text to the model. pi's
@@ -27,7 +28,12 @@ import * as crypto from "node:crypto";
  * Responses:
  *   { "ok": true }
  *   { "ok": true, "type": "pong" }
+ *   { "ok": true, "type": "subscribed" }
  *   { "ok": false, "error": "..." }
+ *
+ * Pushed events (only on connections that sent subscribe):
+ *   { "type": "agent_settled" }
+ *   { "type": "session_shutdown", "reason": "quit" | "reload" | "new" | "resume" | "fork" }
  *
  * Unix: unix socket at /tmp/pi-nvim-sockets/<hash>-<pid>.sock, a symlink at
  * /tmp/pi-nvim-latest.sock, and a .info manifest next to each socket.
@@ -227,6 +233,8 @@ export default function (pi: ExtensionAPI) {
   let socketPath: string | null = null;
   let markerFile: string | null = null;
   let connections = 0;
+  // Connections that sent {"type":"subscribe"}; they only receive pushed events.
+  const listeners = new Set<net.Socket>();
 
   pi.on("session_start", async (_event, ctx) => {
     const cwd = ctx.cwd;
@@ -276,6 +284,7 @@ export default function (pi: ExtensionAPI) {
 
       conn.on("close", () => {
         connections = Math.max(0, connections - 1);
+        listeners.delete(conn);
       });
       conn.on("error", () => {});
     });
@@ -344,6 +353,14 @@ export default function (pi: ExtensionAPI) {
         return;
       }
 
+      if (msg.type === "subscribe") {
+        listeners.add(conn);
+        // A subscriber only receives; the idle timeout must not close it.
+        conn.setTimeout(0);
+        respond(conn, { ok: true, type: "subscribed" });
+        return;
+      }
+
       if (msg.type === "prompt" && typeof msg.message === "string") {
         // Exit kitty's scrollback viewer by switching to private screen mode
         // and back. This snaps to the bottom without clearing scrollback history.
@@ -380,7 +397,30 @@ export default function (pi: ExtensionAPI) {
     } catch {}
   }
 
+  /** Push an event to every connection that subscribed. */
+  function broadcast(obj: any) {
+    const line = JSON.stringify(obj) + "\n";
+    for (const conn of listeners) {
+      try {
+        conn.write(line);
+      } catch {}
+    }
+  }
+
+  pi.on("agent_settled", () => {
+    broadcast({ type: "agent_settled" });
+  });
+
   function cleanup() {
+    // Subscribers only receive; end them so clients see EOF and reconnect to the
+    // socket the next session creates (e.g. after /reload, same pid and path).
+    for (const conn of listeners) {
+      try {
+        conn.end();
+      } catch {}
+    }
+    listeners.clear();
+
     if (server) {
       server.close();
       server = null;
@@ -397,7 +437,9 @@ export default function (pi: ExtensionAPI) {
   const exitCleanup = () => cleanup();
   registerExitHandler(exitCleanup);
 
-  pi.on("session_shutdown", async () => {
+  pi.on("session_shutdown", async (event) => {
+    // Tell connected editors why the session is going away before the socket closes.
+    broadcast({ type: "session_shutdown", reason: event.reason });
     // session_shutdown is the reliable path; the exit handler is only a backstop.
     unregisterExitHandler(exitCleanup);
     cleanup();

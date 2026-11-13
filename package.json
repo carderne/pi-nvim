@@ -1,6 +1,6 @@
 {
   "name": "@sergioia-dev/pi-nvim",
-  "version": "0.2.7",
+  "version": "0.3.0",
   "description": "Bridge between pi coding agent and Neovim",
   "keywords": [
     "pi-package",
@@ -54,7 +54,7 @@
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.87.0",
     "@types/node": "^24",
     "oxfmt": "^0.33.0",
     "oxlint": "^1.48.0",

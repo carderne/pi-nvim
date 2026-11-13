@@ -59,12 +59,15 @@ Options (defaults):
 require("pi-nvim").setup({
   socket_path = nil, -- auto-discover
   set_default_keymaps = true,
+  notify = true, -- popup when pi finishes a task or the session stops
 })
 ```
 
 ## Usage
 
 Start pi in one terminal. Start Neovim in another. The pi extension automatically opens a socket on session start.
+
+Neovim keeps one connection open and shows a `vim.notify` popup when pi finishes a task or the session stops (set `notify = false` to silence it).
 
 ### Commands
 
