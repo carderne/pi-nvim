@@ -1,6 +1,6 @@
 {
-  "name": "pi-nvim",
-  "version": "0.2.6",
+  "name": "@sergioia-dev/pi-nvim",
+  "version": "0.2.9",
   "description": "Bridge between pi coding agent and Neovim",
   "keywords": [
     "pi-package",
@@ -9,7 +9,8 @@
   "files": [
     "index.ts",
     "package.json",
-    "README.md"
+    "README.md",
+    "lua"
   ],
   "type": "module",
   "pi": {
@@ -22,14 +23,20 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/carderne/pi-nvim.git"
+    "url": "git+https://github.com/sergioia-dev/pi-nvim.git"
   },
   "author": "Chris Arderne <chris@rdrn.me>",
+  "contributors": [
+    {
+      "name": "Sergio Idarraga Aguirre",
+      "url": "https://github.com/sergioia-dev"
+    }
+  ],
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/carderne/pi-nvim/issues"
+    "url": "https://github.com/sergioia-dev/pi-nvim/issues"
   },
-  "homepage": "https://github.com/carderne/pi-nvim",
+  "homepage": "https://github.com/sergioia-dev/pi-nvim",
   "scripts": {
     "fmt": "oxfmt index.ts",
     "lint": "oxlint index.ts",
@@ -47,7 +54,7 @@
     }
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.74.0",
+    "@earendil-works/pi-coding-agent": "^0.87.0",
     "@types/node": "^24",
     "oxfmt": "^0.33.0",
     "oxlint": "^1.48.0",
