@@ -1,6 +1,6 @@
 {
   "name": "@sergioia-dev/pi-nvim",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Bridge between pi coding agent and Neovim",
   "keywords": [
     "pi-package",
