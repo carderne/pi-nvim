@@ -61,6 +61,10 @@ export default function (pi: ExtensionAPI) {
   let markerFile: string | null = null;
 
   pi.on("session_start", async (_event, ctx) => {
+    // Headless sessions (subagent children, `pi -p`, JSON mode) must not bind
+    // a socket: the nvim plugin connects to the newest socket for a cwd, so a
+    // headless child would silently hijack prompts meant for the TUI session.
+    if (!ctx.hasUI) return;
     const cwd = ctx.cwd;
     // Ensure sockets directory exists
     try {
